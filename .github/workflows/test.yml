@@ -19,12 +19,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           
       - name: Install dependencies
         run: npm install
@@ -87,12 +87,12 @@ jobs:
     needs: ensure-company-core
     
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           
       - name: Install dependencies
         run: npm install
@@ -105,7 +105,7 @@ jobs:
           SOLR_AUTH: ${{ secrets.SOLR_AUTH }}
           
       - name: Upload Unit Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
           path: test-results-unit.html
@@ -119,7 +119,7 @@ jobs:
           SOLR_AUTH: ${{ secrets.SOLR_AUTH }}
           
       - name: Upload Integration Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: integration-test-results
           path: test-results-integration.html
@@ -133,7 +133,7 @@ jobs:
           SOLR_AUTH: ${{ secrets.SOLR_AUTH }}
           
       - name: Upload E2E Test Results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-test-results
           path: test-results-e2e.html
