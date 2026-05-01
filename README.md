@@ -1,6 +1,6 @@
 # ARRISE S.R.L. - Job Scraper
 
-A Node.js scraper for extracting job listings from ARRISE Careers and storing them in Solr for [peviitor.ro](https://peviitor.ro).
+A Node.js scraper for extracting job listings from ARRISE Careers website and storing them in Solr for [peviitor.ro](https://peviitor.ro).
 
 ## Overview
 
@@ -8,8 +8,8 @@ This project automates the daily scraping of ARRISE job listings in Romania, ens
 
 ## Features
 
-- Scrapes job listings from ARRISE Careers API
-- Validates company data via ANAF (Romanian National Employment Agency)
+- Scrapes job listings from ARRISE Careers website using HTML parsing (cheerio)
+- Validates company data via ANAF (Romanian Tax Authority)
 - Stores jobs in Solr with proper data validation
 - GitHub Actions workflow for daily automated scraping
 - Comprehensive test suite for reliability
@@ -26,6 +26,8 @@ This project automates the daily scraping of ARRISE job listings in Romania, ens
 │   ├── unit/
 │   ├── integration/
 │   └── e2e/
+├── docs/
+│   └── index.html     # GitHub Pages dashboard
 ├── .github/
 │   └── workflows/
 │       ├── scrape.yml     # Daily scraping workflow
@@ -37,7 +39,7 @@ This project automates the daily scraping of ARRISE job listings in Romania, ens
 
 ### Prerequisites
 
-- Node.js 24+
+- Node.js 22+
 - npm
 
 ### Installation
@@ -84,16 +86,16 @@ npm run test:e2e
 
 The `scrape.yml` workflow runs daily at 6 AM UTC via GitHub Actions. It:
 1. Validates company data via ANAF
-2. Scrapes current job listings from ARRISE Careers
+2. Scrapes current job listings from ARRISE Careers website
 3. Updates Solr with new/removed jobs
 4. Uploads job data as artifacts
 
 ### Test Automation
 
 The `test.yml` workflow runs on every push and pull request. It:
-1. Ensures ARRISE exists in the company core
-2. Runs unit, integration, and E2E tests
-3. Validates data integrity in Solr
+1. Runs unit, integration, and E2E tests
+2. Validates data integrity in Solr
+3. Optionally validates and removes expired jobs (manual dispatch)
 
 ## Acknowledgments
 

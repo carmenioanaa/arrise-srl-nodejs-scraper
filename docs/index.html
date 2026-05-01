@@ -244,7 +244,7 @@
     <div class="logo">
       <a href="https://peviitor.ro/" target="_blank">peviitor</a>
     </div>
-    <a href="https://github.com/carmenioanaa/ARRISE-systems-international-srl-nodejs-scraper/blob/master/README.md" target="_blank">Documentație</a>
+    <a href="https://github.com/carmenioanaa/arrise-srl-nodejs-scraper/blob/master/README.md" target="_blank">Documentație</a>
   </header>
 
   <div class="container">
@@ -254,7 +254,7 @@
       </div>
       
       <div class="scraper-info">
-        <h1>ARRISE Systems International SRL</h1>
+        <h1>ARRISE SERVICES S.R.L.</h1>
         <p>Scraper automat pentru job-urile ARRISE Romania de pe Careers API.</p>
         
         <div class="stats">
@@ -288,7 +288,7 @@
           <div class="company-details"></div>
         </div>
         
-        <a class="btn" href="https://github.com/carmenioanaa/ARRISE-systems-international-srl-nodejs-scraper/actions/workflows/scrape.yml" target="_blank">
+        <a class="btn" href="https://github.com/carmenioanaa/arrise-srl-nodejs-scraper/actions/workflows/scrape.yml" target="_blank">
           ▶ Rulează Scraper
         </a>
         
@@ -301,15 +301,15 @@
   </div>
 
   <footer class="footer">
-    <a href="https://github.com/carmenioanaa/ARRISE-systems-international-srl-nodejs-scraper" target="_blank">GitHub</a> •
-    <a href="https://github.com/carmenioanaa/ARRISE-systems-international-srl-nodejs-scraper/blob/master/README.md" target="_blank">Documentație</a> •
+    <a href="https://github.com/carmenioanaa/arrise-srl-nodejs-scraper" target="_blank">GitHub</a> •
+    <a href="https://github.com/carmenioanaa/arrise-srl-nodejs-scraper/blob/master/README.md" target="_blank">Documentație</a> •
     <a href="https://peviitor.ro/" target="_blank">peviitor.ro</a>
   </footer>
 
   <script>
     async function loadStats() {
       try {
-        const res = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SYSTEMS%20INTERNATIONAL%20SRL&page=1', {
+        const res = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&page=1', {
           headers: {
             'origin': 'https://peviitor.ro',
             'referer': 'https://peviitor.ro/'
@@ -318,7 +318,7 @@
         const data = await res.json();
         document.getElementById('jobsCount').textContent = data.response.numFound;
         
-        const vRes = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SYSTEMS%20INTERNATIONAL%20SRL&status=verified&page=1', {
+        const vRes = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&status=verified&page=1', {
           headers: {
             'origin': 'https://peviitor.ro',
             'referer': 'https://peviitor.ro/'
@@ -339,7 +339,7 @@
         let page = 1;
         let moreJobs = true;
         while (moreJobs) {
-          const jobsRes = await fetch(`https://api.peviitor.ro/v1/search/?company=ARRISE%20SYSTEMS%20INTERNATIONAL%20SRL&page=${page}`, {
+          const jobsRes = await fetch(`https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&page=${page}`, {
             headers: {
               'origin': 'https://peviitor.ro',
               'referer': 'https://peviitor.ro/'
