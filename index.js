@@ -64,8 +64,8 @@ function parseJobsFromHtml(html) {
   const $ = cheerio.load(html);
   const jobs = [];
   
-  // Find all job listing links on the page
-  $("a[href^='/careers/job/']").each((_, el) => {
+  // Find all job listing links on the page (both relative and absolute URLs)
+  $("a[href^='/careers/job/'], a[href^='https://arrise.com/careers/job/']").each((_, el) => {
     const href = $(el).attr("href");
     const title = $(el).find("h3, h4, .job-title").text().trim() || $(el).text().trim();
     

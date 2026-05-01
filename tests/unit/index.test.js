@@ -100,71 +100,60 @@ describe('index.js Component Tests', () => {
     });
   });
 
-  describe('parseApiJobs', () => {
-    it('should parse ARRISE API response format', () => {
-      const apiData = {
-        data: {
-          total: 100,
-          jobs: [
-            {
-              uid: '123',
-              name: 'Senior Developer',
-              city: [{ name: 'Bucharest' }],
-              country: [{ name: 'Romania' }],
-              vacancy_type: 'Hybrid',
-              skills: ['Java', 'Spring']
-            }
-          ]
-        }
-      };
+  describe('parseJobsFromHtml', () => {
+    it('should parse job links from ARRISE HTML page', () => {
+      const html = `
+        <html>
+          <body>
+            <a href="/careers/job/game-presenter-1234"><h3>Game Presenter</h3></a>
+            <a href="/careers/job/customer-support-5678"><h4>Customer Support</h4></a>
+            <a href="/other/page">Other Link</a>
+          </body>
+        </html>
+      `;
       
-      const result = index.parseApiJobs(apiData);
+      const result = index.parseJobsFromHtml(html);
       
-      expect(result.jobs).toHaveLength(1);
-      expect(result.jobs[0].title).toBe('Senior Developer');
-      expect(result.jobs[0].location).toEqual(['Bucharest']);
-      expect(result.jobs[0].workmode).toBe('hybrid');
-    });
-  });
-
-  describe('URL Generation', () => {
-    it('should use seo.url when available', () => {
-      const apiData = {
-        data: {
-          total: 1,
-          jobs: [
-            {
-              uid: 'blt123',
-              name: 'Test Job',
-              seo: { url: '/en/vacancy/test-job-blt123_en' },
-              city: [{ name: 'Bucharest' }]
-            }
-          ]
-        }
-      };
-      
-      const result = index.parseApiJobs(apiData);
-      
-      expect(result.jobs[0].url).toBe('https://careers.arrise.com/en/vacancy/test-job-blt123_en');
+      expect(result).toHaveLength(2);
+      expect(result[0].title).toBe('Game Presenter');
+      expect(result[0].url).toBe('https://arrise.com/careers/job/game-presenter-1234');
+      expect(result[0].uid).toBe('game-presenter-1234');
+      expect(result[1].title).toBe('Customer Support');
+      expect(result[1].url).toBe('https://arrise.com/careers/job/customer-support-5678');
     });
 
-    it('should fallback to uid-based URL when no seo.url', () => {
-      const apiData = {
-        data: {
-          total: 1,
-          jobs: [
-            {
-              uid: 'blt456',
-              name: 'Test Job',
-              city: [{ name: 'Bucharest' }]
-            }
-          ]
-        }
-      };
+    it('should handle absolute URLs in href', () => {
+      const html = `
+        <html>
+          <body>
+            <a href="https://arrise.com/careers/job/full-url-9999"><h3>Full URL Job</h3></a>
+            <a href="/careers/job/relative-url-8888"><h3>Relative URL Job</h3></a>
+          </body>
+        </html>
+      `;
       
-      const result = index.parseApiJobs(apiData);
+      const result = index.parseJobsFromHtml(html);
       
-      expect(result.jobs[0].url).toBe('https://careers.arrise.com/en/vacancy/blt456_en');
+      expect(result).toHaveLength(2);
+      expect(result[0].url).toBe('https://arrise.com/careers/job/full-url-9999');
+      expect(result[1].url).toBe('https://arrise.com/careers/job/relative-url-8888');
+    });
+
+    it('should skip links with short or empty titles', () => {
+      const html = `
+        <html>
+          <body>
+            <a href="/careers/job/short-title"><h3>Hi</h3></a>
+            <a href="/careers/job/empty-title"><h3></h3></a>
+            <a href="/careers/job/valid-job"><h3>Valid Job Title</h3></a>
+          </body>
+        </html>
+      `;
+      
+      const result = index.parseJobsFromHtml(html);
+      
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Valid Job Title');
     });
   });
 });

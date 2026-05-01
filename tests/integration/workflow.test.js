@@ -1,5 +1,7 @@
 import { jest } from '@jest/globals';
 
+const HAS_SOLR_AUTH = !!process.env.SOLR_AUTH;
+
 describe('Integration: API Workflow', () => {
   
   describe('Full company validation workflow', () => {
@@ -42,6 +44,7 @@ describe('Integration: API Workflow', () => {
 
   describe('Company Core Model Validation', () => {
     it('should have all required fields per company model', async () => {
+      if (!HAS_SOLR_AUTH) return;
       const solr = await import('../../solr.js');
       
       const result = await solr.queryCompanySOLR('id:40181178');
@@ -49,11 +52,9 @@ describe('Integration: API Workflow', () => {
       
       const arrise = result.docs[0];
       
-      // Required: id, company
       expect(arrise.id).toBe('40181178');
       expect(arrise.company).toBeDefined();
       
-      // All other model fields should exist per company-model.md
       expect(arrise.brand).toBe('ARRISE');
       expect(arrise.status).toBeDefined();
       expect(['activ','suspendat','inactiv','radiat']).toContain(arrise.status);
