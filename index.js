@@ -1,12 +1,16 @@
 /**
  * ARRISE Job Scraper - Main Entry Point
  * 
- * PURPOSE: Scrapes job listings from ARRISE Careers API and stores them in Solr.
+ * PURPOSE: Scrapes job listings from ARRISE Careers website and stores them in Solr.
  * This is the primary orchestrator that coordinates company validation, job scraping,
  * data transformation, and Solr storage.
  */
 
+import dotenv from "dotenv";
+dotenv.config();
+
 import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { validateAndGetCompany } from "./company.js";
@@ -23,10 +27,9 @@ const COMPANY_CIF = "40181178";
 const TIMEOUT = 10000;
 
 // Base URL for ARRISE job listings
-const JOB_BASE = "https://careers.arrise.com";
-
-// Number of jobs to fetch per API page request
-const PAGE_SIZE = 20;
+const JOB_BASE = "https://arrise.com";
+const JOBS_LISTING_URL = "https://arrise.com/careers/job/";
+const ROMANIA_FILTER_URL = "https://arrise.com/careers/location-of-work/romania/";
 
 // Global variable to store company name after validation
 let COMPANY_NAME = null;
@@ -35,183 +38,159 @@ let COMPANY_NAME = null;
 // HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Promise-based sleep function to introduce delays between requests
- * @param {number} ms - Milliseconds to sleep
- */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ============================================================================
-// API FUNCTIONS - Fetching data from ARRISE Careers
+// WEB SCRAPING - Fetching and parsing ARRISE Careers HTML pages
 // ============================================================================
 
-/**
- * Fetches a single page of jobs from ARRISE Careers API
- * @param {number} pageNum - Page number (1-indexed)
- * @returns {Promise<Object>} - API response with job data
- */
-async function fetchJobsPage(pageNum) {
-  // Calculate offset for pagination (API uses 0-based indexing)
-  const from = (pageNum - 1) * PAGE_SIZE;
-  
-  // Build ARRISE API URL with filters for Romania jobs only
-  const url = `https://careers.arrise.com/api/jobs?location=romania&offset=${from}&limit=${PAGE_SIZE}`;
-  
+async function fetchPage(url) {
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-      "Accept": "application/json"
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
   });
   
   if (!res.ok) {
-    throw new Error(`API error ${res.status} for page=${pageNum}`);
+    throw new Error(`HTTP error ${res.status} for ${url}`);
   }
   
-  const data = await res.json();
-  return data;
+  const html = await res.text();
+  return html;
 }
 
-// ============================================================================
-// DATA PARSING - Converting API response to our job model
-// ============================================================================
-
-/**
- * Parses raw API response into our standardized job format
- * @param {Object} apiData - Raw response from ARRISE API
- * @returns {Object} - Object containing jobs array and total count
- */
-function parseApiJobs(apiData) {
-  // Extract jobs array from API response (handle missing data gracefully)
-  const jobs = apiData.jobs || apiData.data?.jobs || [];
-  const total = apiData.total || apiData.data?.total || 0;
+function parseJobsFromHtml(html) {
+  const $ = cheerio.load(html);
+  const jobs = [];
   
-  return {
-    jobs: jobs.map(job => {
-      // Determine work mode based on job type
-      // Maps ARRISE's vacancy_type to our standardized: remote, on-site, or hybrid
-      const jobType = job.type || job.workMode || job.vacancy_type || "Hybrid";
-      let workmode = "hybrid";
-      if (jobType.toLowerCase().includes("remote")) workmode = "remote";
-      else if (jobType.toLowerCase().includes("office") || jobType.toLowerCase().includes("on-site")) workmode = "on-site";
-      
-      // Extract location - prefer city names, fallback to country
-      const location = [];
-      if (job.city && job.city.length > 0) {
-        for (const c of job.city) {
-          if (c.name) location.push(c.name);
-        }
-      } else if (job.location) {
-        location.push(job.location);
-      } else if (job.country?.[0]?.name) {
-        location.push(job.country[0].name);
-      }
-      
-      // Build job URL - use SEO URL if available, otherwise construct from ID
-      const uid = job.id || job.uid || "";
-      const seoUrl = job.url || job.seo?.url || `/jobs/${uid}`;
-      const url = seoUrl.startsWith('http') ? seoUrl : `${JOB_BASE}${seoUrl}`;
-      
-      // Normalize skill tags to lowercase for consistency
-      const tags = (job.tags || job.skills || []).map(s => s.toLowerCase());
-      
-      // Return standardized job object
-      return {
+  // Find all job listing links on the page
+  $("a[href^='/careers/job/']").each((_, el) => {
+    const href = $(el).attr("href");
+    const title = $(el).find("h3, h4, .job-title").text().trim() || $(el).text().trim();
+    
+    if (href && title && title.length > 5) {
+      const url = href.startsWith("http") ? href : `${JOB_BASE}${href}`;
+      jobs.push({
         url,
-        title: job.title || job.name,
-        uid,
-        workmode,
-        location,
-        tags
-      };
-    }),
-    total
-  };
+        title: title.replace(/\s+/g, " ").trim(),
+        uid: href.split("/").pop(),
+        workmode: undefined,
+        location: [],
+        tags: []
+      });
+    }
+  });
+  
+  return jobs;
+}
+
+async function scrapeJobDetails(jobUrl) {
+  try {
+    const html = await fetchPage(jobUrl);
+    const $ = cheerio.load(html);
+    
+    const job = {
+      url: jobUrl,
+      title: "",
+      workmode: undefined,
+      location: ["România"],
+      tags: []
+    };
+    
+    job.title = $("h1").first().text().trim();
+    
+    const description = $("main, article, .prose, .content, .job-description").text().trim();
+    
+    if (description) {
+      const lower = description.toLowerCase();
+      const keywords = [
+        "english", "romanian", "turkish", "russian", "spanish", "german", "greek", "korean", "portuguese",
+        "customer support", "gaming", "casino", "live casino", "igaming",
+        "hr", "talent acquisition", "finance", "legal", "compliance",
+        "tech", "software", "engineering", "database", "audio visual", "cctv",
+        "data", "product", "design", "marketing", "sales",
+        "operations", "facilities", "production", "security",
+        "electrical", "hvac", "maintenance", "styling", "wardrobe"
+      ];
+      job.tags = keywords.filter(kw => lower.includes(kw));
+    }
+    
+    const bodyText = $("body").text().toLowerCase();
+    if (bodyText.includes("on site") || bodyText.includes("on-site")) {
+      job.workmode = "on-site";
+    } else if (bodyText.includes("remote")) {
+      job.workmode = "remote";
+    } else if (bodyText.includes("hybrid")) {
+      job.workmode = "hybrid";
+    }
+    
+    return job;
+  } catch (err) {
+    console.log(`Warning: Failed to fetch details for ${jobUrl}: ${err.message}`);
+    return null;
+  }
 }
 
 // ============================================================================
-// SCRAPING LOGIC - Paginated collection of all jobs
+// SCRAPING LOGIC - Main scraping workflow
 // ============================================================================
 
-/**
- * Scrapes all job listings from ARRISE by iterating through paginated API responses
- * @param {boolean} testOnlyOnePage - If true, stops after first page (for testing)
- * @returns {Promise<Array>} - Array of unique job objects
- */
 async function scrapeAllListings(testOnlyOnePage = false) {
   const allJobs = [];
-  const seenUrls = new Set(); // Track seen URLs to avoid duplicates
-  let page = 1;
-  let totalJobs = 0;
-  const MAX_PAGES = 10; // Safety limit to prevent infinite loops
+  const seenUrls = new Set();
 
-  // Paginate through all job listings
-  while (true) {
-    console.log(`Fetching API page: ${page}`);
-    const data = await fetchJobsPage(page);
-    const result = parseApiJobs(data);
-    const jobs = result.jobs;
-
-    // Stop if no jobs found on this page
-    if (!jobs.length) {
-      console.log(`No jobs found on page ${page}, stopping.`);
-      break;
+  console.log("Fetching ARRISE Romania jobs page...");
+  const html = await fetchPage(ROMANIA_FILTER_URL);
+  const jobs = parseJobsFromHtml(html);
+  
+  console.log(`Found ${jobs.length} job links on Romania page`);
+  
+  for (const job of jobs) {
+    if (!seenUrls.has(job.url)) {
+      seenUrls.add(job.url);
+      allJobs.push(job);
     }
-
-    // Capture total count from first page response
-    if (page === 1) {
-      totalJobs = result.total;
-      console.log(`Total jobs on site: ${totalJobs}`);
-    }
-
-    // Collect unique jobs (avoid duplicates across pages)
-    let newJobs = 0;
-    for (const job of jobs) {
+  }
+  
+  if (allJobs.length === 0) {
+    console.log("No jobs found on Romania page, trying main listing...");
+    const mainHtml = await fetchPage(JOBS_LISTING_URL);
+    const mainJobs = parseJobsFromHtml(mainHtml);
+    
+    for (const job of mainJobs) {
       if (!seenUrls.has(job.url)) {
         seenUrls.add(job.url);
         allJobs.push(job);
-        newJobs++;
       }
     }
-    console.log(`Page ${page}: ${jobs.length} jobs, ${newJobs} new (total: ${allJobs.length})`);
-
-    // Test mode: stop after first page
-    if (testOnlyOnePage) {
-      console.log("Test mode: stopping after page 1.");
-      break;
-    }
-
-    // Safety: stop after max pages
-    if (page >= MAX_PAGES) {
-      console.log(`Max pages (${MAX_PAGES}) reached, stopping.`);
-      break;
-    }
-
-    // Stop if no new jobs (we've seen everything)
-    if (newJobs === 0) {
-      console.log(`No new jobs on page ${page}, stopping.`);
-      break;
-    }
-
-    page += 1;
-    await sleep(1000); // Respectful delay between pages
   }
-
-  console.log(`Total unique jobs collected: ${allJobs.length}`);
-  return allJobs;
+  
+  // In test mode, only scrape details for first 3 jobs
+  const detailsLimit = testOnlyOnePage ? 3 : allJobs.length;
+  console.log(`Fetching details for ${detailsLimit} jobs...`);
+  
+  const detailedJobs = [];
+  for (let i = 0; i < Math.min(detailsLimit, allJobs.length); i++) {
+    const job = allJobs[i];
+    console.log(`[${i + 1}/${detailsLimit}] Fetching: ${job.title}`);
+    
+    const details = await scrapeJobDetails(job.url);
+    if (details && details.title) {
+      detailedJobs.push(details);
+    }
+    
+    await sleep(500);
+  }
+  
+  console.log(`Total unique jobs collected: ${detailedJobs.length}`);
+  return detailedJobs;
 }
 
 // ============================================================================
 // DATA TRANSFORMATION - Preparing jobs for Solr storage
 // ============================================================================
 
-/**
- * Maps raw job data to Solr-compatible job model with timestamps and status
- * @param {Object} rawJob - Job object from scraper
- * @param {string} cif - Company identifier
- * @param {string} companyName - Company name
- * @returns {Object} - Job object ready for Solr storage
- */
 function mapToJobModel(rawJob, cif, companyName = COMPANY_NAME) {
   const now = new Date().toISOString();
 
@@ -227,23 +206,12 @@ function mapToJobModel(rawJob, cif, companyName = COMPANY_NAME) {
     status: "scraped"
   };
 
-  // Remove undefined fields to keep payload clean
   Object.keys(job).forEach((k) => job[k] === undefined && delete job[k]);
 
   return job;
 }
 
-/**
- * Transforms jobs to match Solr schema and filters for Romanian locations
- * - Ensures company name is uppercase
- * - Filters locations to only Romanian cities
- * - Normalizes work mode values
- * @param {Object} payload - Job payload with jobs array
- * @returns {Object} - Transformed payload ready for Solr
- */
 function transformJobsForSOLR(payload) {
-  // List of Romanian cities for location validation
-  // Includes both Romanian and English spellings with diacritics
   const romanianCities = [
     'Bucharest', 'București', 'Cluj-Napoca', 'Cluj Napoca',
     'Timișoara', 'Timisoara', 'Iași', 'Iasi', 'Brașov', 'Brasov',
@@ -258,14 +226,8 @@ function transformJobsForSOLR(payload) {
     'Chitila', 'Mogoșoaia', 'Mogosoaia', 'Otopeni'
   ];
 
-  // Create lookup set for O(1) city validation
   const citySet = new Set(romanianCities.map(c => c.toLowerCase()));
 
-  /**
-   * Normalizes work mode strings to standard values
-   * @param {string} wm - Raw work mode string
-   * @returns {string|undefined} - Normalized work mode
-   */
   const normalizeWorkmode = (wm) => {
     if (!wm) return undefined;
     const lower = wm.toLowerCase();
@@ -274,13 +236,10 @@ function transformJobsForSOLR(payload) {
     return 'hybrid';
   };
 
-  // Transform the payload
   const transformed = {
     ...payload,
-    company: payload.company?.toUpperCase(), // Solr convention: uppercase company names
+    company: payload.company?.toUpperCase(),
     jobs: payload.jobs.map(job => {
-      // Filter locations to only include valid Romanian cities
-      // Also accept generic "Romania" or "România" as valid
       const validLocations = (job.location || []).filter(loc => {
         const lower = loc.toLowerCase().trim();
         if (lower === 'romania' || lower === 'românia') return true;
@@ -289,7 +248,7 @@ function transformJobsForSOLR(payload) {
 
       return {
         ...job,
-        location: validLocations.length > 0 ? validLocations : ['România'], // Default to Romania if no city match
+        location: validLocations.length > 0 ? validLocations : ['România'],
         workmode: normalizeWorkmode(job.workmode)
       };
     })
@@ -299,45 +258,29 @@ function transformJobsForSOLR(payload) {
 }
 
 // ============================================================================
-// MAIN ORCHESTRATION - Coordinates the entire scraping workflow
+// MAIN ORCHESTRATION
 // ============================================================================
 
-/**
- * Main function that orchestrates the complete scraping workflow:
- * 1. Check existing jobs in Solr
- * 2. Validate company via ANAF
- * 3. Scrape jobs from ARRISE API
- * 4. Transform data for Solr
- * 5. Upsert jobs to Solr
- * 6. Report summary
- */
 async function main() {
-  // Check for --test flag to run in test mode (single page only)
   const testOnlyOnePage = process.argv.includes("--test");
   
   try {
-    // Step 1: Get count of existing jobs in Solr for comparison
     console.log("=== Step 1: Get existing jobs count ===");
     const existingResult = await querySOLR(COMPANY_CIF);
     const existingCount = existingResult.numFound;
     console.log(`Found ${existingCount} existing jobs in SOLR`);
-    console.log("(Keeping existing jobs - will upsert ARRISE jobs only)");
 
-    // Step 2: Validate company data via ANAF (ensures we have correct company info)
     console.log("=== Step 2: Validate company via ANAF ===");
     const { company, cif } = await validateAndGetCompany();
     COMPANY_NAME = company;
     const localCif = cif;
     
-    // Step 3: Scrape all jobs from ARRISE Careers API
     const rawJobs = await scrapeAllListings(testOnlyOnePage);
     const scrapedCount = rawJobs.length;
-    console.log(`📊 Jobs scraped from ARRISE Careers website: ${scrapedCount}`);
+    console.log(`📊 Jobs scraped from ARRISE website: ${scrapedCount}`);
 
-    // Step 4: Map raw jobs to Solr model with CIF and company name
     const jobs = rawJobs.map(job => mapToJobModel(job, localCif));
 
-    // Create payload with metadata
     const payload = {
       source: "arrise.com",
       scrapedAt: new Date().toISOString(),
@@ -346,21 +289,17 @@ async function main() {
       jobs
     };
 
-    // Step 5: Transform jobs (filter locations, normalize values)
     console.log("Transforming jobs for SOLR...");
     const transformedPayload = transformJobsForSOLR(payload);
     const validCount = transformedPayload.jobs.filter(j => j.location).length;
     console.log(`📊 Jobs with valid Romanian locations: ${validCount}`);
 
-    // Save transformed jobs to file (for debugging/backup)
     fs.writeFileSync("jobs.json", JSON.stringify(transformedPayload, null, 2), "utf-8");
     console.log("Saved jobs.json");
 
-    // Step 6: Upsert all jobs to Solr (add/update)
-    console.log("\n=== Step 4: Upsert jobs to SOLR ===");
+    console.log("\n=== Step 3: Upsert jobs to SOLR ===");
     await upsertJobs(transformedPayload.jobs);
 
-    // Step 7: Verify final count in Solr
     const finalResult = await querySOLR(COMPANY_CIF);
     console.log(`\n📊 === SUMMARY ===`);
     console.log(`📊 Jobs existing in SOLR before scrape: ${existingCount}`);
@@ -377,10 +316,8 @@ async function main() {
   }
 }
 
-// Export functions for testing
-export { parseApiJobs, mapToJobModel, transformJobsForSOLR };
+export { parseJobsFromHtml, mapToJobModel, transformJobsForSOLR };
 
-// Run main function when executed directly
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main();
 }

@@ -1,5 +1,5 @@
 {
-  "validatedAt": "2026-05-01T10:00:00.000Z",
+  "validatedAt": "2026-05-01T17:32:36.414Z",
   "source": "ANAF",
   "brand": "ARRISE",
   "anaf": {
@@ -59,7 +59,24 @@
     "onrcStatus": 1048,
     "onrcStatusLabel": "Funcțiune"
   },
-  "peviitor": null,
+  "peviitor": {
+    "id": "31146090",
+    "company": "ARRISE S.R.L.",
+    "brand": "ARRISE",
+    "group": "ARRISE Limited",
+    "status": "activ",
+    "location": [
+      "Sector 3 Mun. București"
+    ],
+    "website": [
+      "https://arrise.com"
+    ],
+    "career": [
+      "https://arrise.com/careers"
+    ],
+    "_version_": 1862558632757952500,
+    "_root_": "31146090"
+  },
   "summary": {
     "company": "ARRISE SERVICES S.R.L.",
     "cif": "40181178",
