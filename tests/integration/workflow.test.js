@@ -8,20 +8,20 @@ describe('Integration: API Workflow', () => {
       const company = await import('../../company.js');
       const solr = await import('../../solr.js');
       
-      const searchResults = await demoanaf.searchCompany('EPAM');
+      const searchResults = await demoanaf.searchCompany('ARRISE');
       expect(searchResults.length).toBeGreaterThan(0);
       
-      const epamCompany = searchResults.find(c => 
-        c.name.toUpperCase().includes('EPAM') && c.statusLabel === 'Funcțiune'
+      const arriseCompany = searchResults.find(c => 
+        c.name.toUpperCase().includes('ARRISE') && c.statusLabel === 'Funcțiune'
       );
-      expect(epamCompany).toBeDefined();
+      expect(arriseCompany).toBeDefined();
       
-      const anafData = await demoanaf.getCompanyFromANAF(epamCompany.cui.toString());
-      expect(anafData.name).toBe('EPAM SYSTEMS INTERNATIONAL SRL');
+      const anafData = await demoanaf.getCompanyFromANAF(arriseCompany.cui.toString());
+      expect(anafData.name).toBe('ARRISE SERVICES S.R.L.');
       
       const companyResult = await company.validateAndGetCompany();
       expect(companyResult.status).toBe('active');
-      expect(companyResult.cif).toBe('33159615');
+      expect(companyResult.cif).toBe('40181178');
       
       const solrResult = await solr.querySOLR(companyResult.cif);
       expect(solrResult.numFound).toBeGreaterThan(0);
@@ -36,7 +36,7 @@ describe('Integration: API Workflow', () => {
       const companyResult = await company.validateAndGetCompany();
       
       const solrResult = await solr.queryCompanySOLR(`company:${companyResult.company}*`);
-      expect(solrResult.docs[0].brand).toBe('EPAM');
+      expect(solrResult.docs[0].brand).toBe('ARRISE');
     });
   });
 
@@ -44,23 +44,23 @@ describe('Integration: API Workflow', () => {
     it('should have all required fields per company model', async () => {
       const solr = await import('../../solr.js');
       
-      const result = await solr.queryCompanySOLR('id:33159615');
+      const result = await solr.queryCompanySOLR('id:40181178');
       expect(result.numFound).toBe(1);
       
-      const epam = result.docs[0];
+      const arrise = result.docs[0];
       
       // Required: id, company
-      expect(epam.id).toBe('33159615');
-      expect(epam.company).toBeDefined();
+      expect(arrise.id).toBe('40181178');
+      expect(arrise.company).toBeDefined();
       
       // All other model fields should exist per company-model.md
-      expect(epam.brand).toBe('EPAM');
-      expect(epam.status).toBeDefined();
-      expect(['activ','suspendat','inactiv','radiat']).toContain(epam.status);
-      expect(epam.location).toBeDefined();
-      expect(Array.isArray(epam.location)).toBe(true);
-      expect(epam.lastScraped).toBeDefined();
-      expect(epam.scraperFile).toBeDefined();
+      expect(arrise.brand).toBe('ARRISE');
+      expect(arrise.status).toBeDefined();
+      expect(['activ','suspendat','inactiv','radiat']).toContain(arrise.status);
+      expect(arrise.location).toBeDefined();
+      expect(Array.isArray(arrise.location)).toBe(true);
+      expect(arrise.lastScraped).toBeDefined();
+      expect(arrise.scraperFile).toBeDefined();
     });
   });
 });
