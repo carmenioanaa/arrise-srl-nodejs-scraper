@@ -159,6 +159,21 @@ async function scrapeAllListings(testOnlyOnePage = false) {
   const allJobs = [];
   const seenUrls = new Set();
 
+  const romanianCities = [
+    'Bucharest', 'București', 'Cluj-Napoca', 'Cluj Napoca',
+    'Timișoara', 'Timisoara', 'Iași', 'Iasi', 'Brașov', 'Brasov',
+    'Constanța', 'Constanta', 'Craiova', 'Bacău', 'Sibiu',
+    'Târgu Mureș', 'Targu Mures', 'Oradea', 'Baia Mare', 'Satu Mare',
+    'Ploiești', 'Ploiesti', 'Pitești', 'Pitesti', 'Arad', 'Galați', 'Galati',
+    'Brăila', 'Braila', 'Drobeta-Turnu Severin', 'Râmnicu Vâlcea', 'Ramnicu Valcea',
+    'Buzău', 'Buzau', 'Botoșani', 'Botosani', 'Zalău', 'Zalau', 'Hunedoara', 'Deva',
+    'Suceava', 'Bistrița', 'Bistrita', 'Tulcea', 'Călărași', 'Calarasi',
+    'Giurgiu', 'Alba Iulia', 'Slatina', 'Piatra Neamț', 'Piatra Neamt', 'Roman',
+    'Dumbrăvița', 'Dumbravita', 'Voluntari', 'Popești-Leordeni', 'Popesti-Leordeni',
+    'Chitila', 'Mogoșoaia', 'Mogosoaia', 'Otopeni'
+  ];
+  const citySet = new Set(romanianCities.map(c => c.toLowerCase()));
+
   console.log("Fetching ARRISE main job listing...");
   const html = await fetchPage(JOBS_LISTING_URL);
   const jobs = parseJobsFromHtml(html);
@@ -168,11 +183,19 @@ async function scrapeAllListings(testOnlyOnePage = false) {
   for (const job of jobs) {
     if (!seenUrls.has(job.url)) {
       seenUrls.add(job.url);
-      allJobs.push(job);
+      const isRomania = job.location.some(loc => {
+        const lower = loc.toLowerCase().trim();
+        return lower === 'romania' || lower === 'românia' || citySet.has(lower);
+      });
+      if (isRomania) {
+        allJobs.push(job);
+      }
     }
   }
 
-  const detailsLimit = testOnlyOnePage ? 3 : allJobs.length;
+  console.log(`Jobs with Romanian locations: ${allJobs.length}`);
+
+  const detailsLimit = testOnlyOnePage ? Math.min(3, allJobs.length) : allJobs.length;
   console.log(`Fetching details for ${detailsLimit} jobs...`);
 
   const detailedJobs = [];

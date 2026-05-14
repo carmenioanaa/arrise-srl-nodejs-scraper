@@ -309,61 +309,43 @@
   <script>
     async function loadStats() {
       try {
-        const res = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&page=1', {
-          headers: {
-            'origin': 'https://peviitor.ro',
-            'referer': 'https://peviitor.ro/'
-          }
-        });
+        const CIF = '40181178';
+        const COMPANY = 'ARRISE%20SERVICES%20S.R.L.';
+        const API = 'https://api.peviitor.ro/v1';
+
+        const res = await fetch(`${API}/search/?company=${COMPANY}&page=1`);
         const data = await res.json();
         document.getElementById('jobsCount').textContent = data.response.numFound;
-        
-        const vRes = await fetch('https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&status=verified&page=1', {
-          headers: {
-            'origin': 'https://peviitor.ro',
-            'referer': 'https://peviitor.ro/'
-          }
-        });
+
+        const vRes = await fetch(`${API}/search/?company=${COMPANY}&status=verified&page=1`);
         const vData = await vRes.json();
         document.getElementById('verifiedCount').textContent = vData.response.numFound;
-        
+
         const now = new Date();
-        const time = now.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-        const date = now.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        document.getElementById('lastRunTime').textContent = time;
-        document.getElementById('lastRunDate').textContent = date;
-        
+        document.getElementById('lastRunTime').textContent = now.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+        document.getElementById('lastRunDate').textContent = now.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
         const jobsList = document.getElementById('jobsListContent');
         jobsList.innerHTML = '';
-        
+
         let page = 1;
         let moreJobs = true;
         while (moreJobs) {
-          const jobsRes = await fetch(`https://api.peviitor.ro/v1/search/?company=ARRISE%20SERVICES%20S.R.L.&page=${page}`, {
-            headers: {
-              'origin': 'https://peviitor.ro',
-              'referer': 'https://peviitor.ro/'
-            }
-          });
+          const jobsRes = await fetch(`${API}/search/?company=${COMPANY}&page=${page}`);
           const jobsData = await jobsRes.json();
           if (jobsData.response.docs.length === 0) {
             moreJobs = false;
           } else {
             jobsData.response.docs.forEach(job => {
               const li = document.createElement('li');
-              li.innerHTML = `<a href="${job.url}" target="_blank">${job.job_title}</a>`;
+              li.innerHTML = `<a href="${job.url}" target="_blank">${job.job_title || job.title}</a>`;
               jobsList.appendChild(li);
             });
             page++;
           }
         }
-        
-        const cRes = await fetch('https://api.peviitor.ro/v1/company/?cif=40181178', {
-          headers: {
-            'origin': 'https://peviitor.ro',
-            'referer': 'https://peviitor.ro/'
-          }
-        });
+
+        const cRes = await fetch(`${API}/company/?cif=${CIF}`);
         const cData = await cRes.json();
         const comp = cData.company;
         const detailsDiv = document.querySelector('.company-details');
@@ -377,11 +359,11 @@
           <div class="detail-item"><strong>Ultimul scrape:</strong> ${comp.lastScraped}</div>
         `;
       } catch(e) {
-        document.getElementById('jobsCount').textContent = '88';
-        document.getElementById('verifiedCount').textContent = '88';
-        const now = new Date();
-        document.getElementById('lastRunTime').textContent = now.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-        document.getElementById('lastRunDate').textContent = now.toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        console.error('API error:', e);
+        document.getElementById('jobsCount').textContent = 'Eroare';
+        document.getElementById('verifiedCount').textContent = 'Eroare';
+        document.getElementById('lastRunTime').textContent = 'Eroare';
+        document.getElementById('lastRunDate').textContent = 'Eroare';
       }
     }
     loadStats();
