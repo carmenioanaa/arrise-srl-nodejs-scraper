@@ -29,7 +29,6 @@ const TIMEOUT = 10000;
 // Base URL for ARRISE job listings
 const JOB_BASE = "https://arrise.com";
 const JOBS_LISTING_URL = "https://arrise.com/careers/job/";
-const ROMANIA_FILTER_URL = "https://arrise.com/careers/location-of-work/romania/";
 
 // Global variable to store company name after validation
 let COMPANY_NAME = null;
@@ -63,25 +62,41 @@ async function fetchPage(url) {
 function parseJobsFromHtml(html) {
   const $ = cheerio.load(html);
   const jobs = [];
-  
-  // Find all job listing links on the page (both relative and absolute URLs)
+
   $("a[href^='/careers/job/'], a[href^='https://arrise.com/careers/job/']").each((_, el) => {
     const href = $(el).attr("href");
     const title = $(el).find("h3, h4, .job-title").text().trim() || $(el).text().trim();
-    
+
     if (href && title && title.length > 5) {
       const url = href.startsWith("http") ? href : `${JOB_BASE}${href}`;
+
+      let location = [];
+      let workmode = undefined;
+
+      $(el).find(".position-card-text-bottom-item").each((_, item) => {
+        const imgAlt = $(item).find("img").attr("alt") || "";
+        const text = $(item).find("p").text().trim();
+        if (imgAlt.includes("location")) {
+          location.push(text);
+        } else if (imgAlt.includes("employment") || imgAlt.includes("desktop")) {
+          const lower = text.toLowerCase();
+          if (lower.includes("on site") || lower.includes("on-site")) workmode = "on-site";
+          else if (lower.includes("remote")) workmode = "remote";
+          else if (lower.includes("hybrid")) workmode = "hybrid";
+        }
+      });
+
       jobs.push({
         url,
         title: title.replace(/\s+/g, " ").trim(),
         uid: href.split("/").pop(),
-        workmode: undefined,
-        location: [],
+        workmode,
+        location,
         tags: []
       });
     }
   });
-  
+
   return jobs;
 }
 
@@ -89,19 +104,32 @@ async function scrapeJobDetails(jobUrl) {
   try {
     const html = await fetchPage(jobUrl);
     const $ = cheerio.load(html);
-    
+
     const job = {
       url: jobUrl,
       title: "",
       workmode: undefined,
-      location: ["România"],
+      location: [],
       tags: []
     };
-    
+
     job.title = $("h1").first().text().trim();
-    
+
+    $(".tag").each((_, el) => {
+      const iconClass = $(el).find(".tag-icon").attr("class") || "";
+      const text = $(el).find(".tag-label").text().trim();
+      if (iconClass.includes("location")) {
+        job.location.push(text);
+      } else if (iconClass.includes("clock")) {
+        const lower = text.toLowerCase();
+        if (lower.includes("on site") || lower.includes("on-site")) job.workmode = "on-site";
+        else if (lower.includes("remote")) job.workmode = "remote";
+        else if (lower.includes("hybrid")) job.workmode = "hybrid";
+      }
+    });
+
     const description = $("main, article, .prose, .content, .job-description").text().trim();
-    
+
     if (description) {
       const lower = description.toLowerCase();
       const keywords = [
@@ -115,16 +143,7 @@ async function scrapeJobDetails(jobUrl) {
       ];
       job.tags = keywords.filter(kw => lower.includes(kw));
     }
-    
-    const bodyText = $("body").text().toLowerCase();
-    if (bodyText.includes("on site") || bodyText.includes("on-site")) {
-      job.workmode = "on-site";
-    } else if (bodyText.includes("remote")) {
-      job.workmode = "remote";
-    } else if (bodyText.includes("hybrid")) {
-      job.workmode = "hybrid";
-    }
-    
+
     return job;
   } catch (err) {
     console.log(`Warning: Failed to fetch details for ${jobUrl}: ${err.message}`);
@@ -140,49 +159,35 @@ async function scrapeAllListings(testOnlyOnePage = false) {
   const allJobs = [];
   const seenUrls = new Set();
 
-  console.log("Fetching ARRISE Romania jobs page...");
-  const html = await fetchPage(ROMANIA_FILTER_URL);
+  console.log("Fetching ARRISE main job listing...");
+  const html = await fetchPage(JOBS_LISTING_URL);
   const jobs = parseJobsFromHtml(html);
-  
-  console.log(`Found ${jobs.length} job links on Romania page`);
-  
+
+  console.log(`Found ${jobs.length} job links on main listing page`);
+
   for (const job of jobs) {
     if (!seenUrls.has(job.url)) {
       seenUrls.add(job.url);
       allJobs.push(job);
     }
   }
-  
-  if (allJobs.length === 0) {
-    console.log("No jobs found on Romania page, trying main listing...");
-    const mainHtml = await fetchPage(JOBS_LISTING_URL);
-    const mainJobs = parseJobsFromHtml(mainHtml);
-    
-    for (const job of mainJobs) {
-      if (!seenUrls.has(job.url)) {
-        seenUrls.add(job.url);
-        allJobs.push(job);
-      }
-    }
-  }
-  
-  // In test mode, only scrape details for first 3 jobs
+
   const detailsLimit = testOnlyOnePage ? 3 : allJobs.length;
   console.log(`Fetching details for ${detailsLimit} jobs...`);
-  
+
   const detailedJobs = [];
   for (let i = 0; i < Math.min(detailsLimit, allJobs.length); i++) {
     const job = allJobs[i];
     console.log(`[${i + 1}/${detailsLimit}] Fetching: ${job.title}`);
-    
+
     const details = await scrapeJobDetails(job.url);
     if (details && details.title) {
       detailedJobs.push(details);
     }
-    
+
     await sleep(500);
   }
-  
+
   console.log(`Total unique jobs collected: ${detailedJobs.length}`);
   return detailedJobs;
 }
@@ -239,19 +244,21 @@ function transformJobsForSOLR(payload) {
   const transformed = {
     ...payload,
     company: payload.company?.toUpperCase(),
-    jobs: payload.jobs.map(job => {
-      const validLocations = (job.location || []).filter(loc => {
-        const lower = loc.toLowerCase().trim();
-        if (lower === 'romania' || lower === 'românia') return true;
-        return citySet.has(lower);
-      }).map(loc => loc.toLowerCase() === 'romania' ? 'România' : loc);
+    jobs: payload.jobs
+      .map(job => {
+        const validLocations = (job.location || []).filter(loc => {
+          const lower = loc.toLowerCase().trim();
+          if (lower === 'romania' || lower === 'românia') return true;
+          return citySet.has(lower);
+        }).map(loc => loc.toLowerCase() === 'romania' ? 'România' : loc);
 
-      return {
-        ...job,
-        location: validLocations.length > 0 ? validLocations : ['România'],
-        workmode: normalizeWorkmode(job.workmode)
-      };
-    })
+        return {
+          ...job,
+          location: validLocations.length > 0 ? validLocations : undefined,
+          workmode: normalizeWorkmode(job.workmode)
+        };
+      })
+      .filter(job => job.location)
   };
 
   return transformed;
