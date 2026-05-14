@@ -217,22 +217,6 @@ function mapToJobModel(rawJob, cif, companyName = COMPANY_NAME) {
 }
 
 function transformJobsForSOLR(payload) {
-  const romanianCities = [
-    'Bucharest', 'București', 'Cluj-Napoca', 'Cluj Napoca',
-    'Timișoara', 'Timisoara', 'Iași', 'Iasi', 'Brașov', 'Brasov',
-    'Constanța', 'Constanta', 'Craiova', 'Bacău', 'Sibiu',
-    'Târgu Mureș', 'Targu Mures', 'Oradea', 'Baia Mare', 'Satu Mare',
-    'Ploiești', 'Ploiesti', 'Pitești', 'Pitesti', 'Arad', 'Galați', 'Galati',
-    'Brăila', 'Braila', 'Drobeta-Turnu Severin', 'Râmnicu Vâlcea', 'Ramnicu Valcea',
-    'Buzău', 'Buzau', 'Botoșani', 'Botosani', 'Zalău', 'Zalau', 'Hunedoara', 'Deva',
-    'Suceava', 'Bistrița', 'Bistrita', 'Tulcea', 'Călărași', 'Calarasi',
-    'Giurgiu', 'Alba Iulia', 'Slatina', 'Piatra Neamț', 'Piatra Neamt', 'Roman',
-    'Dumbrăvița', 'Dumbravita', 'Voluntari', 'Popești-Leordeni', 'Popesti-Leordeni',
-    'Chitila', 'Mogoșoaia', 'Mogosoaia', 'Otopeni'
-  ];
-
-  const citySet = new Set(romanianCities.map(c => c.toLowerCase()));
-
   const normalizeWorkmode = (wm) => {
     if (!wm) return undefined;
     const lower = wm.toLowerCase();
@@ -244,21 +228,10 @@ function transformJobsForSOLR(payload) {
   const transformed = {
     ...payload,
     company: payload.company?.toUpperCase(),
-    jobs: payload.jobs
-      .map(job => {
-        const validLocations = (job.location || []).filter(loc => {
-          const lower = loc.toLowerCase().trim();
-          if (lower === 'romania' || lower === 'românia') return true;
-          return citySet.has(lower);
-        }).map(loc => loc.toLowerCase() === 'romania' ? 'România' : loc);
-
-        return {
-          ...job,
-          location: validLocations.length > 0 ? validLocations : undefined,
-          workmode: normalizeWorkmode(job.workmode)
-        };
-      })
-      .filter(job => job.location)
+    jobs: payload.jobs.map(job => ({
+      ...job,
+      workmode: normalizeWorkmode(job.workmode)
+    }))
   };
 
   return transformed;
@@ -298,14 +271,22 @@ async function main() {
 
     console.log("Transforming jobs for SOLR...");
     const transformedPayload = transformJobsForSOLR(payload);
-    const validCount = transformedPayload.jobs.filter(j => j.location).length;
-    console.log(`📊 Jobs with valid Romanian locations: ${validCount}`);
+    console.log(`📊 Jobs after transform: ${transformedPayload.jobs.length}`);
 
-    fs.writeFileSync("jobs.json", JSON.stringify(transformedPayload, null, 2), "utf-8");
-    console.log("Saved jobs.json");
+    const validJobs = transformedPayload.jobs.filter(j => j.title && j.title.trim().length > 0);
+    const skippedJobs = transformedPayload.jobs.length - validJobs.length;
+    if (skippedJobs > 0) {
+      console.log(`⚠️ Skipping ${skippedJobs} jobs with null/empty title:`);
+      transformedPayload.jobs.filter(j => !j.title || j.title.trim().length === 0).forEach(j => {
+        console.log(`  - ${j.url}`);
+      });
+    }
+
+    fs.writeFileSync("jobs.json", JSON.stringify({ ...transformedPayload, jobs: validJobs }, null, 2), "utf-8");
+    console.log(`Saved ${validJobs.length} jobs to jobs.json`);
 
     console.log("\n=== Step 3: Upsert jobs to SOLR ===");
-    await upsertJobs(transformedPayload.jobs);
+    await upsertJobs(validJobs);
 
     const finalResult = await querySOLR(COMPANY_CIF);
     console.log(`\n📊 === SUMMARY ===`);
